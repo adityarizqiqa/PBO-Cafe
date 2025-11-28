@@ -13,7 +13,7 @@ public class Member {
     private Integer points;
     private LocalDateTime tanggalJoin;
     
-    // Constructors
+    // Konstruktor
     public Member() {}
     
     public Member(Integer idMember, String namaMember, String noTelp, String email, 
@@ -45,16 +45,9 @@ public class Member {
     public LocalDateTime getTanggalJoin() { return tanggalJoin; }
     public void setTanggalJoin(LocalDateTime tanggalJoin) { this.tanggalJoin = tanggalJoin; }
     
-    // Database operations
-    private Connection getConnection() throws SQLException {
-        String url = "jdbc:postgresql://localhost:5432/kasir_cafe";
-        String user = "postgres";
-        String password = "9023JN";
-        return DriverManager.getConnection(url, user, password);
-    }
-    
+    // Database dengan dbHelper
     public void save() {
-        if (this.idMember == 0) {
+        if (this.idMember == null) {
             insert();
         } else {
             update();
@@ -63,125 +56,81 @@ public class Member {
     
     private void insert() {
         String sql = "INSERT INTO member (nama_member, no_telp, email, points, tanggal_join) " +
-                    "VALUES (?, ?, ?, ?, ?)";
+                    "VALUES ('" + this.namaMember + "', '" + this.noTelp + "', '" + 
+                    this.email + "', " + (this.points != null ? this.points : 0) + ", " +
+                    (this.tanggalJoin != null ? "'" + Timestamp.valueOf(this.tanggalJoin) + "'" : "CURRENT_TIMESTAMP") + ")";
         
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            
-            stmt.setString(1, this.namaMember);
-            stmt.setString(2, this.noTelp);
-            stmt.setString(3, this.email);
-            stmt.setInt(4, this.points != null ? this.points : 0);
-            stmt.setTimestamp(5, this.tanggalJoin != null ? 
-                Timestamp.valueOf(this.tanggalJoin) : Timestamp.valueOf(LocalDateTime.now()));
-            
-            stmt.executeUpdate();
-            
-            // Get generated ID
-            ResultSet rs = stmt.getGeneratedKeys();
-            if (rs.next()) {
-                this.idMember = rs.getInt(1);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Error inserting member: " + e.getMessage(), e);
+        int generatedId = dbHelper.insertQueryGetId(sql);
+        if (generatedId != -1) {
+            this.idMember = generatedId;
         }
     }
     
     private void update() {
-        String sql = "UPDATE member SET nama_member = ?, no_telp = ?, email = ?, points = ? " +
-                    "WHERE id_member = ?";
+        String sql = "UPDATE member SET nama_member = '" + this.namaMember + 
+                    "', no_telp = '" + this.noTelp + 
+                    "', email = '" + this.email + 
+                    "', points = " + (this.points != null ? this.points : 0) + 
+                    " WHERE id_member = " + this.idMember;
         
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            stmt.setString(1, this.namaMember);
-            stmt.setString(2, this.noTelp);
-            stmt.setString(3, this.email);
-            stmt.setInt(4, this.points != null ? this.points : 0);
-            stmt.setInt(5, this.idMember);
-            
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            throw new RuntimeException("Error updating member: " + e.getMessage(), e);
-        }
+        dbHelper.executeQuery(sql);
     }
     
     public boolean delete() {
-        String sql = "DELETE FROM member WHERE id_member = ?";
-        
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            stmt.setInt(1, this.idMember);
-            int rowsAffected = stmt.executeUpdate();
-            return rowsAffected > 0;
-        } catch (SQLException e) {
-            throw new RuntimeException("Error deleting member: " + e.getMessage(), e);
-        }
+        String sql = "DELETE FROM member WHERE id_member = " + this.idMember;
+        return dbHelper.executeQuery(sql);
     }
     
-    public Member getById(int id) {
-        String sql = "SELECT * FROM member WHERE id_member = ?";
+    // Static methods for database operations
+    public static Member getById(int id) {
+        String sql = "SELECT * FROM member WHERE id_member = " + id;
+        ResultSet rs = dbHelper.selectQuery(sql);
         
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            stmt.setInt(1, id);
-            ResultSet rs = stmt.executeQuery();
-            
+        try {
             if (rs.next()) {
                 return mapResultSetToMember(rs);
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Error getting member by ID: " + e.getMessage(), e);
+            System.err.println("Error getting member by ID: " + e.getMessage());
         }
         return null;
     }
     
-    public List<Member> getAll() {
+    public static List<Member> getAll() {
         List<Member> members = new ArrayList<>();
         String sql = "SELECT * FROM member ORDER BY id_member";
+        ResultSet rs = dbHelper.selectQuery(sql);
         
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
-            
+        try {
             while (rs.next()) {
                 members.add(mapResultSetToMember(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Error getting all members: " + e.getMessage(), e);
+            System.err.println("Error getting all members: " + e.getMessage());
         }
         return members;
     }
     
-    public List<Member> search(String keyword) {
+    public static List<Member> search(String keyword) {
         List<Member> members = new ArrayList<>();
         String sql = "SELECT * FROM member WHERE " +
-                    "LOWER(nama_member) LIKE LOWER(?) OR " +
-                    "no_telp LIKE ? OR " +
-                    "LOWER(email) LIKE LOWER(?) " +
+                    "LOWER(nama_member) LIKE LOWER('%" + keyword + "%') OR " +
+                    "no_telp LIKE '%" + keyword + "%' OR " +
+                    "LOWER(email) LIKE LOWER('%" + keyword + "%') " +
                     "ORDER BY id_member";
         
-        try (Connection conn = getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            
-            String searchPattern = "%" + keyword + "%";
-            stmt.setString(1, searchPattern);
-            stmt.setString(2, searchPattern);
-            stmt.setString(3, searchPattern);
-            
-            ResultSet rs = stmt.executeQuery();
+        ResultSet rs = dbHelper.selectQuery(sql);
+        try {
             while (rs.next()) {
                 members.add(mapResultSetToMember(rs));
             }
         } catch (SQLException e) {
-            throw new RuntimeException("Error searching members: " + e.getMessage(), e);
+            System.err.println("Error searching members: " + e.getMessage());
         }
         return members;
     }
     
-    private Member mapResultSetToMember(ResultSet rs) throws SQLException {
+    private static Member mapResultSetToMember(ResultSet rs) throws SQLException {
         Member member = new Member();
         member.setIdMember(rs.getInt("id_member"));
         member.setNamaMember(rs.getString("nama_member"));
@@ -195,5 +144,17 @@ public class Member {
         }
         
         return member;
+    }
+    
+    @Override
+    public String toString() {
+        return "Member{" +
+                "idMember=" + idMember +
+                ", namaMember='" + namaMember + '\'' +
+                ", noTelp='" + noTelp + '\'' +
+                ", email='" + email + '\'' +
+                ", points=" + points +
+                ", tanggalJoin=" + tanggalJoin +
+                '}';
     }
 }
