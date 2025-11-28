@@ -1,7 +1,8 @@
-package Backend;
+package backend;
 
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import backend.dbHelper;
 
 public class Kategori {
 
@@ -37,7 +38,7 @@ public class Kategori {
     // Ambil 1 kategori berdasarkan id
     public Kategori getById(int id) {
         Kategori kat = new Kategori();
-        ResultSet rs = DBHelper.selectQuery(
+        ResultSet rs = dbHelper.selectQuery(
                 "SELECT * FROM kategori_menu WHERE id_kategori = '" + id + "'"
         );
         try {
@@ -55,7 +56,7 @@ public class Kategori {
     // Ambil semua kategori
     public ArrayList<Kategori> getAll() {
         ArrayList<Kategori> listKategori = new ArrayList<>();
-        ResultSet rs = DBHelper.selectQuery("SELECT * FROM kategori_menu");
+        ResultSet rs = dbHelper.selectQuery("SELECT * FROM kategori_menu");
         try {
             while (rs.next()) {
                 Kategori kat = new Kategori();
@@ -75,18 +76,18 @@ public class Kategori {
             String SQL = "INSERT INTO kategori_menu (nama_kategori) VALUES ("
                     + " '" + this.nama + "'"
                     + " )";
-            this.idkategori = DBHelper.insertQueryGetId(SQL);
+            this.idkategori = dbHelper.insertQueryGetId(SQL);
         } else {
             String SQL = "UPDATE kategori_menu SET "
                     + " nama_kategori = '" + this.nama + "' "
                     + " WHERE id_kategori = '" + this.idkategori + "'";
-            DBHelper.executeQuery(SQL);
+            dbHelper.executeQuery(SQL);
         }
     }
 
     // Hapus
     public void delete() {
         String SQL = "DELETE FROM kategori_menu WHERE id_kategori = '" + this.idkategori + "'";
-        DBHelper.executeQuery(SQL);
+        dbHelper.executeQuery(SQL);
     }
 }

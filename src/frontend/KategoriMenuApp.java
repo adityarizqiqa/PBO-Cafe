@@ -1,7 +1,9 @@
-package Frontend;
-import Backend.Kategori;
+package frontend;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+
+import backend.Kategori;
+
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;

@@ -49,7 +49,7 @@ public class Member {
     private Connection getConnection() throws SQLException {
         String url = "jdbc:postgresql://localhost:5432/kasir_cafe";
         String user = "postgres";
-        String password = "your_password";
+        String password = "9023JN";
         return DriverManager.getConnection(url, user, password);
     }
     
