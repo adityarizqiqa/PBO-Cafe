@@ -47,7 +47,7 @@ public class Member {
     
     // Database dengan dbHelper
     public void save() {
-        if (this.idMember == null) {
+        if (this.idMember == null || this.idMember == 0) {
             insert();
         } else {
             update();
@@ -56,9 +56,9 @@ public class Member {
     
     private void insert() {
         String sql = "INSERT INTO member (nama_member, no_telp, email, points, tanggal_join) " +
-                    "VALUES ('" + this.namaMember + "', '" + this.noTelp + "', '" + 
-                    this.email + "', " + (this.points != null ? this.points : 0) + ", " +
-                    (this.tanggalJoin != null ? "'" + Timestamp.valueOf(this.tanggalJoin) + "'" : "CURRENT_TIMESTAMP") + ")";
+                    "VALUES ('" + escapeSql(this.namaMember) + "', '" + escapeSql(this.noTelp) + "', '" + 
+                    escapeSql(this.email) + "', " + (this.points != null ? this.points : 0) + ", " +
+                    "CURRENT_TIMESTAMP)";
         
         int generatedId = dbHelper.insertQueryGetId(sql);
         if (generatedId != -1) {
@@ -67,9 +67,9 @@ public class Member {
     }
     
     private void update() {
-        String sql = "UPDATE member SET nama_member = '" + this.namaMember + 
-                    "', no_telp = '" + this.noTelp + 
-                    "', email = '" + this.email + 
+        String sql = "UPDATE member SET nama_member = '" + escapeSql(this.namaMember) + 
+                    "', no_telp = '" + escapeSql(this.noTelp) + 
+                    "', email = '" + escapeSql(this.email) + 
                     "', points = " + (this.points != null ? this.points : 0) + 
                     " WHERE id_member = " + this.idMember;
         
@@ -81,8 +81,8 @@ public class Member {
         return dbHelper.executeQuery(sql);
     }
     
-    // Static methods for database operations
-    public static Member getById(int id) {
+    // Methods for database operations (non-static for consistency)
+    public Member getById(int id) {
         String sql = "SELECT * FROM member WHERE id_member = " + id;
         ResultSet rs = dbHelper.selectQuery(sql);
         
@@ -96,7 +96,7 @@ public class Member {
         return null;
     }
     
-    public static List<Member> getAll() {
+    public List<Member> getAll() {
         List<Member> members = new ArrayList<>();
         String sql = "SELECT * FROM member ORDER BY id_member";
         ResultSet rs = dbHelper.selectQuery(sql);
@@ -111,12 +111,12 @@ public class Member {
         return members;
     }
     
-    public static List<Member> search(String keyword) {
+    public List<Member> search(String keyword) {
         List<Member> members = new ArrayList<>();
         String sql = "SELECT * FROM member WHERE " +
-                    "LOWER(nama_member) LIKE LOWER('%" + keyword + "%') OR " +
-                    "no_telp LIKE '%" + keyword + "%' OR " +
-                    "LOWER(email) LIKE LOWER('%" + keyword + "%') " +
+                    "LOWER(nama_member) LIKE LOWER('%" + escapeSql(keyword) + "%') OR " +
+                    "no_telp LIKE '%" + escapeSql(keyword) + "%' OR " +
+                    "LOWER(email) LIKE LOWER('%" + escapeSql(keyword) + "%') " +
                     "ORDER BY id_member";
         
         ResultSet rs = dbHelper.selectQuery(sql);
@@ -130,7 +130,13 @@ public class Member {
         return members;
     }
     
-    private static Member mapResultSetToMember(ResultSet rs) throws SQLException {
+    // Helper method to prevent SQL injection
+    private static String escapeSql(String input) {
+        if (input == null) return "";
+        return input.replace("'", "''");
+    }
+    
+    private Member mapResultSetToMember(ResultSet rs) throws SQLException {
         Member member = new Member();
         member.setIdMember(rs.getInt("id_member"));
         member.setNamaMember(rs.getString("nama_member"));
