@@ -1,10 +1,15 @@
 package frontend;
 
+import backend.LaporanBackend;
 import java.awt.CardLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.RoundRectangle2D;
+import java.util.Calendar;
+import java.util.Date;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
 
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
@@ -62,8 +67,58 @@ public class FrmLaporanPenjualan extends javax.swing.JFrame {
         panelOpsiFilter.add(panelMingguan, "Mingguan");
         panelOpsiFilter.add(panelBulanan, "Bulanan");
         panelOpsiFilter.add(panelKustom, "Kustom");
+        
+        // Load initial data
+        loadAllData();
     }
 
+    // ============================================
+    // FRONTEND METHODS (UI Logic Only)
+    // ============================================
+    
+    private void loadAllData() {
+        LaporanBackend.LaporanSummary summary = LaporanBackend.LaporanController.getAllLaporan();
+        displayLaporan(summary);
+    }
+
+    private void loadDataByDateRange(Date startDate, Date endDate) {
+        if (startDate == null || endDate == null) {
+            JOptionPane.showMessageDialog(this, "Mohon pilih tanggal awal dan akhir");
+            return;
+        }
+
+        if (startDate.after(endDate)) {
+            JOptionPane.showMessageDialog(this, "Tanggal awal tidak boleh lebih besar dari tanggal akhir");
+            return;
+        }
+
+        LaporanBackend.LaporanSummary summary = LaporanBackend.LaporanController.getLaporanByDateRange(startDate, endDate);
+        displayLaporan(summary);
+    }
+
+    private void displayLaporan(LaporanBackend.LaporanSummary summary) {
+        DefaultTableModel model = (DefaultTableModel) tabelLaporan.getModel();
+        model.setRowCount(0);
+
+        if (summary != null && summary.items != null && !summary.items.isEmpty()) {
+            for (LaporanBackend.LaporanItem item : summary.items) {
+                model.addRow(new Object[]{
+                    item.idTransaksi,
+                    item.tanggal,
+                    item.namaMenu,
+                    item.qty,
+                    String.format("%,.2f", item.subtotal),
+                    item.metodePembayaran
+                });
+            }
+            
+            totalTransaksi.setText(String.valueOf(summary.totalTransaksi));
+            totalPendapatan.setText(String.format("Rp %,.2f", summary.totalPendapatan));
+        } else {
+            totalTransaksi.setText("0");
+            totalPendapatan.setText("Rp 0,00");
+        }
+    }
 
     /**
      * This method is called from within the constructor to initialize the form.
@@ -362,8 +417,10 @@ public class FrmLaporanPenjualan extends javax.swing.JFrame {
         panelMingguan.setBackground(new java.awt.Color(207, 223, 255));
 
         btnMingguIni.setText("Minggu Ini");
+        btnMingguIni.addActionListener(this::btnMingguIniActionPerformed);
 
         jButton2.setText("Minggu Sebelumnya");
+        jButton2.addActionListener(this::jButton2ActionPerformed);
 
         javax.swing.GroupLayout panelMingguanLayout = new javax.swing.GroupLayout(panelMingguan);
         panelMingguan.setLayout(panelMingguanLayout);
@@ -394,6 +451,7 @@ public class FrmLaporanPenjualan extends javax.swing.JFrame {
 
         btnBulanSebelumnya.setFont(new java.awt.Font("Yu Gothic UI", 0, 12)); // NOI18N
         btnBulanSebelumnya.setText("Bulan Sebelumnya");
+        btnBulanSebelumnya.addActionListener(this::btnBulanSebelumnyaActionPerformed);
 
         javax.swing.GroupLayout panelBulananLayout = new javax.swing.GroupLayout(panelBulanan);
         panelBulanan.setLayout(panelBulananLayout);
@@ -638,20 +696,75 @@ public class FrmLaporanPenjualan extends javax.swing.JFrame {
     }//GEN-LAST:event_jComboBox1ActionPerformed
 
     private void btnTerapkanFilterActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnTerapkanFilterActionPerformed
-        // TODO add your handling code here:
+        String selectedFilter = (String) jComboBox1.getSelectedItem();
+        if (selectedFilter == null) {
+            loadAllData();
+            return;
+        }
+
+        switch (selectedFilter) {
+            case "Kustom":
+                Date startDate = jdcTanggalAwal.getDate();
+                Date endDate = jdcTanggalAkhir.getDate();
+                loadDataByDateRange(startDate, endDate);
+                break;
+            default:
+                loadAllData();
+                break;
+        }
     }//GEN-LAST:event_btnTerapkanFilterActionPerformed
 
     private void btnHariIniActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnHariIniActionPerformed
-        // TODO add your handling code here:
+        Date today = new Date();
+        loadDataByDateRange(today, today);
     }//GEN-LAST:event_btnHariIniActionPerformed
 
     private void btnHariKemarinActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnHariKemarinActionPerformed
-        // TODO add your handling code here:
+        Date yesterday = new Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000);
+        loadDataByDateRange(yesterday, yesterday);
     }//GEN-LAST:event_btnHariKemarinActionPerformed
 
     private void btnBulanIniActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBulanIniActionPerformed
-        // TODO add your handling code here:
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        Date startOfMonth = cal.getTime();
+        loadDataByDateRange(startOfMonth, new Date());
     }//GEN-LAST:event_btnBulanIniActionPerformed
+
+    private void btnMingguIniActionPerformed(java.awt.event.ActionEvent evt) {
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+        Date startOfWeek = cal.getTime();
+        loadDataByDateRange(startOfWeek, new Date());
+    }
+
+    private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {
+        Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.WEEK_OF_YEAR, -1);
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+        Date startOfLastWeek = cal.getTime();
+
+        Calendar cal2 = Calendar.getInstance();
+        cal2.add(Calendar.WEEK_OF_YEAR, -1);
+        cal2.set(Calendar.DAY_OF_WEEK, Calendar.SATURDAY);
+        Date endOfLastWeek = cal2.getTime();
+
+        loadDataByDateRange(startOfLastWeek, endOfLastWeek);
+    }
+
+    private void btnBulanSebelumnyaActionPerformed(java.awt.event.ActionEvent evt) {
+        Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.MONTH, -1);
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        Date startOfLastMonth = cal.getTime();
+
+        Calendar cal2 = Calendar.getInstance();
+        cal2.set(Calendar.DAY_OF_MONTH, 1);
+        cal2.add(Calendar.DATE, -1);
+        Date endOfLastMonth = cal2.getTime();
+
+        loadDataByDateRange(startOfLastMonth, endOfLastMonth);
+    }
 
     /**
      * @param args the command line arguments
