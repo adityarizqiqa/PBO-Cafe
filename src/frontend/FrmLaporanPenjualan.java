@@ -1,6 +1,10 @@
 package frontend;
 
 import java.awt.CardLayout;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.geom.RoundRectangle2D;
 
 /*
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
@@ -15,6 +19,32 @@ import java.awt.CardLayout;
 public class FrmLaporanPenjualan extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FrmLaporanPenjualan.class.getName());
+
+    // Custom rounded panel class
+    public class RoundedPanel extends javax.swing.JPanel {
+        private int cornerRadius = 20;
+        
+        public RoundedPanel() {
+            super();
+            setOpaque(false);
+        }
+        
+        public RoundedPanel(int radius) {
+            super();
+            this.cornerRadius = radius;
+            setOpaque(false);
+        }
+        
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g.create();
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setColor(getBackground());
+            g2d.fill(new RoundRectangle2D.Double(0, 0, getWidth(), getHeight(), cornerRadius, cornerRadius));
+            g2d.dispose();
+        }
+    }
 
     /**
      * Creates new form FrmLaporanPenjualan
@@ -46,7 +76,7 @@ public class FrmLaporanPenjualan extends javax.swing.JFrame {
 
         jLabel2 = new javax.swing.JLabel();
         bg_panel1 = new javax.swing.JPanel();
-        bg_panel2 = new javax.swing.JPanel();
+        bg_panel2 = new RoundedPanel(12);
         jScrollPane2 = new javax.swing.JScrollPane();
         tabelLaporan = new javax.swing.JTable();
         btnTerapkanFilter = new javax.swing.JButton();
