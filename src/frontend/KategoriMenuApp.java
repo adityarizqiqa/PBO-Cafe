@@ -16,8 +16,9 @@ public class KategoriMenuApp extends JFrame {
     private DefaultTableModel tableModel;
 
     public KategoriMenuApp() {
-        setTitle("Form Kategori Menu");
-        setSize(600, 400);
+        setTitle("Kategori Menu");
+        setSize(600, 600);
+        setBackground(getForeground());
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
@@ -26,40 +27,63 @@ public class KategoriMenuApp extends JFrame {
 
     private void initComponents() {
         // Panel utama
-        JPanel panelMain = new JPanel(new BorderLayout(10, 10));
-        panelMain.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel panelMain = new JPanel(new BorderLayout(20, 20));
+        panelMain.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+
+        Color darkRed = new Color(183, 28, 28);
+        panelMain.setBackground(Color.BLUE);
 
         // Panel form input
         JPanel panelForm = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.insets = new Insets(10, 5, 10, 5);
         gbc.anchor = GridBagConstraints.WEST;
 
+        JLabel lbljudul = new JLabel("FORM KATEGORI MENU");
         JLabel lblIdKategori = new JLabel("ID Kategori:");
         JLabel lblNamaKategori = new JLabel("Nama Kategori:");
 
+        
         txtIdKategori = new JTextField(15);
         txtNamaKategori = new JTextField(20);
 
         gbc.gridx = 0;
         gbc.gridy = 0;
-        panelForm.add(lblIdKategori, gbc);
-
-        gbc.gridx = 1;
-        panelForm.add(txtIdKategori, gbc);
+        panelForm.add(lbljudul, gbc);
 
         gbc.gridx = 0;
         gbc.gridy = 1;
+        panelForm.add(lblIdKategori, gbc);
+
+        gbc.gridx = 1;
+         gbc.gridy = 1;
+        panelForm.add(txtIdKategori, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 2;
         panelForm.add(lblNamaKategori, gbc);
 
         gbc.gridx = 1;
         panelForm.add(txtNamaKategori, gbc);
 
         // Panel tombol
-        JPanel panelButton = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        JPanel panelButton = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 15));
         JButton btnTambah = new JButton("Tambah");
         JButton btnEdit = new JButton("Edit");
         JButton btnHapus = new JButton("Hapus");
+
+        Color primaryBlue = new Color(25, 118, 210);
+        btnTambah.setBackground(primaryBlue);
+
+        Color lightBlueButton = new Color(179, 229, 252); 
+        JButton[] buttons = {btnTambah, btnEdit, btnHapus};
+        for (JButton b : buttons) {
+            b.setBackground(lightBlueButton);   
+            b.setForeground(Color.BLACK);      
+            b.setFocusPainted(false);
+            b.setBorder(BorderFactory.createEmptyBorder(6, 16, 6, 16));
+            b.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        }
 
         panelButton.add(btnTambah);
         panelButton.add(btnEdit);
