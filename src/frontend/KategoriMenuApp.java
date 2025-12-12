@@ -103,7 +103,7 @@ public class KategoriMenuApp extends JFrame {
         // Load data dari backend (DB lewat class Kategori)
         loadDataFromBackend();
 
-        // Tambahkan listener tombol
+        // listener tombol
         btnTambah.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -163,6 +163,15 @@ public class KategoriMenuApp extends JFrame {
 
         if (nama.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Nama Kategori wajib diisi", "Peringatan", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Kategori cek = new Kategori().getByNama(nama);
+        if (cek.getIdkategori() != 0) {
+            JOptionPane.showMessageDialog(this,
+                "Nama kategori sudah dipakai, silakan gunakan nama lain.",
+                "Peringatan",
+                JOptionPane.WARNING_MESSAGE);
             return;
         }
 
