@@ -2,6 +2,8 @@
 package frontend;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
@@ -20,7 +22,7 @@ public class FrmPesanan extends JFrame {
     private JComboBox<String> cbMeja;
     private JTable tblMenu, tblCart, tblRiwayat, tblRiwayatDetail;
     private DefaultTableModel modelMenu, modelCart, modelRiwayat, modelRiwayatDetail;
-    private JLabel lblSubtotal;
+    private JLabel lblSubtotal, lblMemberStatus;
     private JButton btnCari, btnSimpan, btnDetail, btnHapus;
     private JButton btnKembali;
 
@@ -42,11 +44,17 @@ public class FrmPesanan extends JFrame {
         txtNama.setBounds(100, 20, 200, 25);
         add(txtNama);
 
+        lblMemberStatus = new JLabel("");
+        lblMemberStatus.setBounds(310, 20, 100, 25);
+        lblMemberStatus.setForeground(Color.BLUE);
+        add(lblMemberStatus);
+
+        // Move No Meja input above the List Detail Pesanan table
         JLabel lblMeja = new JLabel("No Meja :");
-        lblMeja.setBounds(350, 20, 80, 25);
+        lblMeja.setBounds(430, 20, 80, 25);
         add(lblMeja);
         cbMeja = new JComboBox<>(new String[]{"1", "2", "3", "4", "5"});
-        cbMeja.setBounds(430, 20, 100, 25);
+        cbMeja.setBounds(500, 20, 100, 25);
         add(cbMeja);
 
         JLabel lblCari = new JLabel("Cari Menu :");
@@ -207,9 +215,54 @@ public class FrmPesanan extends JFrame {
         loadMenu();
         loadDataPesanan();
 
+        // Add DocumentListener to txtNama for member check
+        txtNama.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                checkMemberStatus();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                checkMemberStatus();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                checkMemberStatus();
+            }
+        });
+
         setVisible(true);
 
         
+    }
+
+    // check if entered name is a registered member
+    private void checkMemberStatus() {
+        String nama = txtNama.getText().trim();
+        if (nama.isEmpty()) {
+            lblMemberStatus.setText("");
+            return;
+        }
+
+        String sql = "SELECT COUNT(*) as count FROM member WHERE nama_member = '" + nama.replace("'", "''") + "'";
+        ResultSet rs = null;
+        try {
+            rs = dbHelper.selectQuery(sql);
+            if (rs != null && rs.next()) {
+                int count = rs.getInt("count");
+                if (count > 0) {
+                    lblMemberStatus.setText("member");
+                } else {
+                    lblMemberStatus.setText("");
+                }
+            }
+            if (rs != null) rs.close();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            lblMemberStatus.setText("");
+        }
     }
 
     // immediate update (called by Timer)
@@ -398,20 +451,7 @@ public class FrmPesanan extends JFrame {
                             return false;
                         }
                     }
-                    
-                    // =========================================================
-                    // LANGKAH 3: UPDATE SUBTOTAL DI HEADER PESANAN
-                    // =========================================================
-                    sqlPesanan = "UPDATE pesanan SET subtotal = " + subtotal + " WHERE id_pesanan = " + generatedId;
-                    
-                    // PASTIKAN MENGGUNAKAN executeQuery() untuk UPDATE
-                    boolean updateOK = dbHelper.executeQuery(sqlPesanan); 
 
-                    if (!updateOK) {
-                        // Ini penting: Jika update subtotal gagal, data pesanan (header) tidak lengkap.
-                        System.err.println("Gagal UPDATE subtotal untuk ID: " + generatedId);
-                    }
-                    
                     return true;
                     
                 } catch (Exception ex) {
@@ -458,9 +498,10 @@ public class FrmPesanan extends JFrame {
     private void loadDataPesanan() {
         modelRiwayat.setRowCount(0);
 
-        String sql = "SELECT id_pesanan, nama_pelanggan, no_meja, "
-                + " subtotal "
-                + "FROM pesanan p ORDER BY p.id_pesanan DESC";
+        String sql = "SELECT p.id_pesanan, p.nama_pelanggan, p.no_meja, COALESCE(SUM(pd.subtotal), 0) as subtotal " +
+                     "FROM pesanan p LEFT JOIN pesanan_detail pd ON p.id_pesanan = pd.id_pesanan " +
+                     "GROUP BY p.id_pesanan, p.nama_pelanggan, p.no_meja " +
+                     "ORDER BY p.id_pesanan DESC";
 
         ResultSet rs = dbHelper.selectQuery(sql);
 

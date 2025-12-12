@@ -20,7 +20,7 @@ public class dbHelper {
     public static void bukaKoneksi(){
         if (koneksi == null) {
             try {
-                String url = "jdbc:postgresql://localhost:5432/kasir_cafe";
+                String url = "jdbc:postgresql://localhost:5432/kaasir_cafee";
                 String user = "postgres";
                 String password = "1234";
 
