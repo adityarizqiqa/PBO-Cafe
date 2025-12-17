@@ -36,6 +36,15 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
         groupRadioButton();
         tampilPanelPembayaran(false);
     }
+    public FrmTransaksiPembayaran(String nama){
+        // initialize components first to ensure ui fields (txtNama etc.) are not null
+        initComponents();
+        isiComboNomorOrder();
+        groupRadioButton();
+        tampilPanelPembayaran(false);
+        // now safe to set the name
+        txtNama.setText(nama);
+    }
     
     private void isiComboNomorOrder() {
         cmbNomorMeja.removeAllItems();
