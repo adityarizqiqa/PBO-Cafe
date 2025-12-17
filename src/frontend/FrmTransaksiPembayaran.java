@@ -14,6 +14,8 @@ import java.awt.event.*;
 import javax.swing.*;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import javax.swing.table.DefaultTableModel;
 
@@ -25,66 +27,86 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FrmTransaksiPembayaran.class.getName());
 
+    private int idPesananDipilih = 0;
 
-
-    /**
-     * Creates new form FrmTransaksiPembayaran
-     */
     public FrmTransaksiPembayaran() {
         initComponents();
+        resetForm();
         isiComboNomorOrder();
-        groupRadioButton();
-        tampilPanelPembayaran(false);
+        groupRadioCash();
+        groupRadioMember();
     }
-    
+
+    private void resetForm() {
+        generateIdTransaksi();
+        idPesananDipilih = 0;
+        txtTotalBelanja.setText("0");
+        txtDiskon.setText("0");
+        txtService.setText("0");
+        txtTotalAkhir.setText("0");
+        txtNominalBayar.setText("0");
+        txtKembalian.setText("0");
+        txtIdMember.setText("0");
+        txtNama.setText("");
+        btnSimpan.setEnabled(false); // Tombol simpan terkunci sampai "Proses" diklik
+    }
+
     private void isiComboNomorOrder() {
         cmbNomorMeja.removeAllItems();
-        for (int id : PesananController.getAllID()) {
-            cmbNomorMeja.addItem(String.valueOf(id));
+        ArrayList<TransaksiBackend.Pesanan> listMeja = PesananController.getNomorMejaTerakhir();
+        for (TransaksiBackend.Pesanan p : listMeja) {
+            cmbNomorMeja.addItem(String.valueOf(p.getNoMeja()));
         }
     }
-    
-    private void tampilPanelPembayaran(boolean cash) {
-        jPanel6.setVisible(cash); // panel cash
-        jPanel7.setVisible(!cash); // panel nomor ewallet/debit
+
+    private void generateIdTransaksi() {
+        txtIdTransaksi.setText(String.valueOf(TransaksiController.getLastId() + 1));
+        txtTanggal.setText(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
     }
 
-    private void groupRadioButton() {
+    private void groupRadioCash() {
         ButtonGroup bg = new ButtonGroup();
-        bg.add(rbCash);
-        bg.add(rbEWallet);
-
-        rbCash.addActionListener(e -> tampilPanelPembayaran(true));
-        rbEWallet.addActionListener(e -> tampilPanelPembayaran(false));
+        bg.add(rbCash); bg.add(rbEWallet);
+        rbCash.addActionListener(e -> { panelCash.setVisible(true); panelDigital.setVisible(false); });
+        rbEWallet.addActionListener(e -> { panelCash.setVisible(false); panelDigital.setVisible(true); });
     }
-    
-     private void hitungTotalAkhir() {
-        double totalBelanja = Double.parseDouble(txtTotalBelanja.getText());
-        double diskon = txtDiskon.getText().isEmpty() ? 0 : Double.parseDouble(txtDiskon.getText());
-        double pajak = txtService.getText().isEmpty() ? 0 : Double.parseDouble(txtService.getText());
 
-        double totalAkhir = totalBelanja - diskon + pajak;
-        txtTotalAkhir.setText(String.valueOf(totalAkhir));
+    private void groupRadioMember() {
+        ButtonGroup bg = new ButtonGroup();
+        bg.add(rbMember); bg.add(rbNonMember);
+        rbMember.addActionListener(e -> { panelMember.setVisible(true); panelNonMember.setVisible(false); });
+        rbNonMember.addActionListener(e -> { panelMember.setVisible(false); panelNonMember.setVisible(true); });
     }
-    
-    
-    private int getIdMemberByNama(String nama) {
-        int id = 0;
 
-        try {
-            String q = "SELECT id_member FROM member WHERE nama_member = '" + nama + "'";
-            ResultSet rs = dbHelper.selectQuery(q);
-
-            if (rs.next()) {
-                id = rs.getInt("id_member");
+    private void cekIdMember() {
+        String nama = txtNama.getText().trim();
+        if (!nama.isEmpty()) {
+            int id = MemberController.getIdMemberByNama(nama);
+            if (id != 0) {
+                txtIdMember.setText(String.valueOf(id));
+                hitungDiskonDanPajak();
+            } else {
+                txtIdMember.setText("0");
+                JOptionPane.showMessageDialog(this, "Member tidak ditemukan!");
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+        }
+    }
+
+    private void hitungDiskonDanPajak() {
+        double belanja = Double.parseDouble(txtTotalBelanja.getText());
+        double pajak = belanja * 0.10;
+        double diskon = 0;
+
+        if (rbMember.isSelected()) {
+            int id = Integer.parseInt(txtIdMember.getText());
+            int poin = MemberController.getPoinMember(id);
+            diskon = (poin / 10) * 5000; // Contoh: tiap 10 poin diskon 5rb
         }
 
-        return id;
+        txtService.setText(String.valueOf(pajak));
+        txtDiskon.setText(String.valueOf(diskon));
+        txtTotalAkhir.setText(String.valueOf(belanja + pajak - diskon));
     }
-    
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
