@@ -68,15 +68,12 @@ public class KategoriMenuApp extends JFrame {
 
         // Panel tombol
         JPanel panelButton = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 15));
-        JButton btnTambah = new JButton("Tambah");
-        JButton btnEdit = new JButton("Edit");
+        // Satu tombol saja untuk tambah & edit
+        JButton btnSimpan = new JButton("Simpan");
         JButton btnHapus = new JButton("Hapus");
 
-        Color primaryBlue = new Color(25, 118, 210);
-        btnTambah.setBackground(primaryBlue);
-
         Color lightBlueButton = new Color(179, 229, 252); 
-        JButton[] buttons = {btnTambah, btnEdit, btnHapus};
+        JButton[] buttons = {btnSimpan, btnHapus};
         for (JButton b : buttons) {
             b.setBackground(lightBlueButton);   
             b.setForeground(Color.BLACK);      
@@ -85,8 +82,7 @@ public class KategoriMenuApp extends JFrame {
             b.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         }
 
-        panelButton.add(btnTambah);
-        panelButton.add(btnEdit);
+        panelButton.add(btnSimpan);
         panelButton.add(btnHapus);
 
         // Tabel kategori (hanya ID dan Nama sesuai requirement)
@@ -104,17 +100,10 @@ public class KategoriMenuApp extends JFrame {
         loadDataFromBackend();
 
         // listener tombol
-        btnTambah.addActionListener(new ActionListener() {
+        btnSimpan.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                tambahKategori();
-            }
-        });
-
-        btnEdit.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                editKategori();
+                simpanKategori();
             }
         });
 
@@ -154,6 +143,19 @@ public class KategoriMenuApp extends JFrame {
                     k.getIdkategori(),
                     k.getNama()
             });
+        }
+    }
+
+    // Satu pintu untuk tambah atau edit, tergantung form
+    private void simpanKategori() {
+        String idText = txtIdKategori.getText().trim();
+
+        // Jika ID kosong berarti tambah data baru
+        if (idText.isEmpty()) {
+            tambahKategori();
+        } else {
+            // Jika ada ID (biasanya dari klik tabel) berarti edit data
+            editKategori();
         }
     }
 
