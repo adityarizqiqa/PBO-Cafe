@@ -5,17 +5,15 @@
 package frontend;
 
 import backend.*;
+import backend.TransaksiBackend.MemberController;
+import backend.TransaksiBackend.PesananController;
 import backend.TransaksiBackend.Transaksi;
 import backend.TransaksiBackend.TransaksiController;
-import backend.TransaksiBackend.PesananController;
-import backend.TransaksiBackend.MemberController;
-
-import java.awt.event.*;
-import javax.swing.*;
 import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import javax.swing.table.DefaultTableModel;
+import javax.swing.*;
 
 /**
  *
@@ -25,77 +23,181 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FrmTransaksiPembayaran.class.getName());
 
+    private int idPesananDipilih = 0;
 
-
-    /**
-     * Creates new form FrmTransaksiPembayaran
-     */
     public FrmTransaksiPembayaran() {
         initComponents();
+        cmbNomorMeja.addActionListener(e -> {
+            ambilTotalBelanjaMeja();
+        });
+        resetForm();
         isiComboNomorOrder();
-        groupRadioButton();
-        tampilPanelPembayaran(false);
+        groupRadioCash();
+        groupRadioMember();
+        panelMember.setVisible(false);
+        panelDigital.setVisible(false);
+        txtDiskon.setEditable(false);
+        txtService.setEditable(false);
     }
-    
+
+    // Di dalam FrmTransaksiPembayaran.java
+    public FrmTransaksiPembayaran(String namaDariPesanan) {
+        initComponents();
+        
+        // 1. Tampilkan nama di kedua kemungkinan field (Member & Non-Member)
+        txtNama.setText(namaDariPesanan);
+        txtNamaNonMember.setText(namaDariPesanan);
+        
+        // 2. Jalankan logika penentuan Panel
+        tentukanPanelMember(namaDariPesanan);
+        
+        isiComboNomorOrder(); // Tetap panggil fungsi inisialisasi lainnya
+    }
+
+    private void resetForm() {
+        generateIdTransaksi();
+        idPesananDipilih = 0;
+        txtTotalBelanja.setText("0");
+        txtDiskon.setText("0");
+        txtService.setText("0");
+        txtTotalAkhir.setText("0");
+        txtNominalBayar.setText("0");
+        txtKembalian.setText("0");
+        txtIdMember.setText("0");
+        txtNama.setText("");
+        btnSimpan.setEnabled(false); 
+        txtDiskon.setEditable(false);
+        txtService.setEditable(false);// Tombol simpan terkunci sampai "Proses" diklik
+    }
+
     private void isiComboNomorOrder() {
-        cmbNomorOrder.removeAllItems();
-        for (int id : PesananController.getAllID()) {
-            cmbNomorOrder.addItem(String.valueOf(id));
+        cmbNomorMeja.removeAllItems(); 
+    ArrayList<TransaksiBackend.Pesanan> listMeja = PesananController.getNomorMejaTerakhir();
+    
+        if (listMeja.isEmpty()) {
+            cmbNomorMeja.addItem("-- Tidak ada pesanan --");
+            txtTotalBelanja.setText("0");
+            txtTotalAkhir.setText("0");
+        } else {
+            for (TransaksiBackend.Pesanan p : listMeja) {
+                cmbNomorMeja.addItem(String.valueOf(p.getNoMeja()));
+            }
+            
+            // Pilih meja paling atas
+            cmbNomorMeja.setSelectedIndex(0);
+            
+            // Panggil fungsi secara manual satu kali untuk inisialisasi total belanja
+            ambilTotalBelanjaMeja();
         }
     }
+
+    private void ambilTotalBelanjaMeja() {
+        Object selectedItem = cmbNomorMeja.getSelectedItem();
     
-    private void tampilPanelPembayaran(boolean cash) {
-        jPanel6.setVisible(cash); // panel cash
-        jPanel7.setVisible(!cash); // panel nomor ewallet/debit
+        if (selectedItem != null && !selectedItem.toString().contains("-")) {
+            try {
+                int noMeja = Integer.parseInt(selectedItem.toString());
+                ArrayList<TransaksiBackend.Pesanan> list = PesananController.getNomorMejaTerakhir();
+                
+                for (TransaksiBackend.Pesanan p : list) {
+                    if (p.getNoMeja() == noMeja) {
+                        double total = PesananController.getTotalBelanja(p.getIdOrder());
+                        txtTotalBelanja.setText(String.format("%.0f", total));
+                        
+                        // Update perhitungan pajak dan diskon otomatis
+                        hitungDiskonDanPajak();
+                        break;
+                    }
+                }
+            } catch (NumberFormatException e) {
+                txtTotalBelanja.setText("0");
+            }
+        }
     }
 
-    private void groupRadioButton() {
+    private void generateIdTransaksi() {
+        txtIdTransaksi.setText(String.valueOf(TransaksiController.getLastId() + 1));
+        txtTanggal.setText(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+    }
+
+    private void groupRadioCash() {
         ButtonGroup bg = new ButtonGroup();
-        bg.add(rbCash);
-        bg.add(rbEWallet);
-        bg.add(rbDebit);
-
-        rbCash.addActionListener(e -> tampilPanelPembayaran(true));
-        rbEWallet.addActionListener(e -> tampilPanelPembayaran(false));
-        rbDebit.addActionListener(e -> tampilPanelPembayaran(false));
+        bg.add(rbCash); bg.add(rbEWallet);
+        rbCash.addActionListener(e -> { panelCash.setVisible(true); panelDigital.setVisible(false); });
+        rbEWallet.addActionListener(e -> { panelCash.setVisible(false); panelDigital.setVisible(true); });
     }
-    
-     private void hitungTotalAkhir() {
-        double totalBelanja = Double.parseDouble(txtTotalBelanja.getText());
-        double diskon = txtDiskon.getText().isEmpty() ? 0 : Double.parseDouble(txtDiskon.getText());
-        double pajak = txtService.getText().isEmpty() ? 0 : Double.parseDouble(txtService.getText());
 
-        double totalAkhir = totalBelanja - diskon + pajak;
-        txtTotalAkhir.setText(String.valueOf(totalAkhir));
+    private void groupRadioMember() {
+        ButtonGroup bg = new ButtonGroup();
+        bg.add(rbMember); bg.add(rbNonMember);
+        rbMember.addActionListener(e -> { panelMember.setVisible(true); panelNonMember.setVisible(false); });
+        rbNonMember.addActionListener(e -> { panelMember.setVisible(false); panelNonMember.setVisible(true); });
     }
-    
-    private void cmbNomorOrderActionPerformed(java.awt.event.ActionEvent evt) {                                              
-        if (cmbNomorOrder.getSelectedItem() != null) {
-            int id = Integer.parseInt(cmbNomorOrder.getSelectedItem().toString());
-            double total = PesananController.getTotalBelanja(id);
-            txtTotalBelanja.setText(String.valueOf(total));
-            hitungTotalAkhir();
+
+    private void hitungDiskonDanPajak() {
+        try {
+            double totalBelanja = Double.parseDouble(txtTotalBelanja.getText().isEmpty() ? "0" : txtTotalBelanja.getText());
+
+            double pajak = totalBelanja * 0.10;
+
+            double diskon = 0;
+            if (rbMember.isSelected()) {
+                int idMember = Integer.parseInt(txtIdMember.getText());
+                if (idMember > 0) {
+                    diskon = totalBelanja * 0.05;
+                }
+            }
+
+            double totalAkhir = totalBelanja + pajak - diskon;
+
+            txtService.setText(String.format("%.0f", pajak));
+            txtDiskon.setText(String.format("%.0f", diskon));
+            txtTotalAkhir.setText(String.format("%.0f", totalAkhir));
+            
+        } catch (NumberFormatException e) {
+            System.out.println("Error hitung: " + e.getMessage());
         }
     }
-    
-    private int getIdMemberByNama(String nama) {
-    int id = 0;
-
-    try {
-        String q = "SELECT id_member FROM member WHERE nama_member = '" + nama + "'";
-        ResultSet rs = dbHelper.selectQuery(q);
-
-        if (rs.next()) {
-            id = rs.getInt("id_member");
+        
+    private void tentukanPanelMember(String nama) {
+        if (nama.isEmpty()) {
+            rbNonMember.setSelected(true);
+            panelMember.setVisible(false);
+            panelNonMember.setVisible(true);
+            return;
         }
-    } catch (Exception e) {
-        e.printStackTrace();
+
+        try {
+            // Cek apakah nama tersebut terdaftar di tabel member
+            String sql = "SELECT id_member FROM member WHERE nama_member ILIKE '" + nama.replace("'", "''") + "'";
+            ResultSet rs = dbHelper.selectQuery(sql);
+
+            if (rs != null && rs.next()) {
+                // JIKA MEMBER DITEMUKAN
+                int id = rs.getInt("id_member");
+                txtIdMember.setText(String.valueOf(id));
+                
+                rbMember.setSelected(true);
+                panelMember.setVisible(true);
+                panelNonMember.setVisible(false);
+            } else {
+                // JIKA BUKAN MEMBER
+                rbNonMember.setSelected(true);
+                panelMember.setVisible(false);
+                panelNonMember.setVisible(true);
+                
+                txtIdMember.setText("0");
+            }
+            
+            // Update perhitungan (karena member biasanya dapat diskon)
+            hitungDiskonDanPajak();
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    return id;
-}
-    
-    /**
+     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
      * regenerated by the Form Editor.
@@ -106,6 +208,7 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
         jPanel1 = new javax.swing.JPanel();
         filler1 = new javax.swing.Box.Filler(new java.awt.Dimension(0, 0), new java.awt.Dimension(0, 0), new java.awt.Dimension(0, 32767));
+        jPanel9 = new javax.swing.JPanel();
         jPanel2 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         jPanel3 = new javax.swing.JPanel();
@@ -113,7 +216,7 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
         jLabel3 = new javax.swing.JLabel();
         jLabel4 = new javax.swing.JLabel();
         txtIdTransaksi = new javax.swing.JTextField();
-        cmbNomorOrder = new javax.swing.JComboBox<>();
+        cmbNomorMeja = new javax.swing.JComboBox<>();
         txtTanggal = new javax.swing.JTextField();
         jPanel4 = new javax.swing.JPanel();
         jLabel5 = new javax.swing.JLabel();
@@ -127,27 +230,32 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
         jPanel5 = new javax.swing.JPanel();
         rbCash = new javax.swing.JRadioButton();
         rbEWallet = new javax.swing.JRadioButton();
-        rbDebit = new javax.swing.JRadioButton();
-        jPanel6 = new javax.swing.JPanel();
+        panelCash = new javax.swing.JPanel();
         jLabel9 = new javax.swing.JLabel();
         jLabel10 = new javax.swing.JLabel();
         jLabel11 = new javax.swing.JLabel();
         txtNominalBayar = new javax.swing.JTextField();
         txtKembalian = new javax.swing.JTextField();
-        jPanel7 = new javax.swing.JPanel();
+        panelDigital = new javax.swing.JPanel();
         jLabel12 = new javax.swing.JLabel();
         jLabel13 = new javax.swing.JLabel();
         txtNomor = new javax.swing.JTextField();
         jPanel8 = new javax.swing.JPanel();
         btnProses = new javax.swing.JButton();
-        btnCetak = new javax.swing.JButton();
         btnSimpan = new javax.swing.JButton();
-        jPanel10 = new javax.swing.JPanel();
+        panelMember = new javax.swing.JPanel();
         jLabel15 = new javax.swing.JLabel();
         jLabel14 = new javax.swing.JLabel();
         txtIdMember = new javax.swing.JTextField();
         txtNama = new javax.swing.JTextField();
         jLabel16 = new javax.swing.JLabel();
+        panelNonMember = new javax.swing.JPanel();
+        jLabel17 = new javax.swing.JLabel();
+        jLabel18 = new javax.swing.JLabel();
+        txtNamaNonMember = new javax.swing.JTextField();
+        jPanel12 = new javax.swing.JPanel();
+        rbMember = new javax.swing.JRadioButton();
+        rbNonMember = new javax.swing.JRadioButton();
 
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
@@ -157,6 +265,17 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 100, Short.MAX_VALUE)
+        );
+
+        javax.swing.GroupLayout jPanel9Layout = new javax.swing.GroupLayout(jPanel9);
+        jPanel9.setLayout(jPanel9Layout);
+        jPanel9Layout.setHorizontalGroup(
+            jPanel9Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGap(0, 100, Short.MAX_VALUE)
+        );
+        jPanel9Layout.setVerticalGroup(
+            jPanel9Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGap(0, 100, Short.MAX_VALUE)
         );
 
@@ -193,7 +312,7 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
         jLabel2.setText("ID Transaksi");
 
-        jLabel3.setText("Nomor Order");
+        jLabel3.setText("Nomor Meja");
 
         jLabel4.setText("Tanggal/Waktu");
 
@@ -204,7 +323,7 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
             }
         });
 
-        cmbNomorOrder.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
+        cmbNomorMeja.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
 
         javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
         jPanel3.setLayout(jPanel3Layout);
@@ -212,7 +331,7 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel3Layout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(jPanel3Layout.createSequentialGroup()
                         .addComponent(jLabel4)
                         .addGap(18, 18, 18)
@@ -221,11 +340,11 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
                         .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(jLabel2)
                             .addComponent(jLabel3))
-                        .addGap(28, 28, 28)
+                        .addGap(31, 31, 31)
                         .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(txtIdTransaksi, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(cmbNomorOrder, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                            .addComponent(cmbNomorMeja, javax.swing.GroupLayout.PREFERRED_SIZE, 121, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(txtIdTransaksi, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))))
+                .addContainerGap(310, Short.MAX_VALUE))
         );
         jPanel3Layout.setVerticalGroup(
             jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -236,7 +355,7 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
                     .addComponent(txtIdTransaksi, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(cmbNomorOrder, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cmbNomorMeja, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jLabel3))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
@@ -330,22 +449,23 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
             }
         });
 
-        rbEWallet.setText("E-Wallet");
-
-        rbDebit.setText("Debit");
+        rbEWallet.setText("E-Wallet/Debit");
+        rbEWallet.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                rbEWalletActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout jPanel5Layout = new javax.swing.GroupLayout(jPanel5);
         jPanel5.setLayout(jPanel5Layout);
         jPanel5Layout.setHorizontalGroup(
             jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel5Layout.createSequentialGroup()
-                .addGap(59, 59, 59)
+                .addGap(153, 153, 153)
                 .addComponent(rbCash, javax.swing.GroupLayout.PREFERRED_SIZE, 98, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(42, 42, 42)
-                .addComponent(rbEWallet, javax.swing.GroupLayout.PREFERRED_SIZE, 98, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                .addComponent(rbDebit, javax.swing.GroupLayout.PREFERRED_SIZE, 98, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(44, 44, 44))
+                .addGap(45, 45, 45)
+                .addComponent(rbEWallet)
+                .addContainerGap(139, Short.MAX_VALUE))
         );
         jPanel5Layout.setVerticalGroup(
             jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -353,12 +473,11 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
                 .addContainerGap()
                 .addGroup(jPanel5Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(rbCash)
-                    .addComponent(rbEWallet)
-                    .addComponent(rbDebit))
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addComponent(rbEWallet))
+                .addContainerGap(20, Short.MAX_VALUE))
         );
 
-        jPanel6.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
+        panelCash.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
         jLabel9.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
         jLabel9.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
@@ -375,39 +494,39 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
             }
         });
 
-        javax.swing.GroupLayout jPanel6Layout = new javax.swing.GroupLayout(jPanel6);
-        jPanel6.setLayout(jPanel6Layout);
-        jPanel6Layout.setHorizontalGroup(
-            jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+        javax.swing.GroupLayout panelCashLayout = new javax.swing.GroupLayout(panelCash);
+        panelCash.setLayout(panelCashLayout);
+        panelCashLayout.setHorizontalGroup(
+            panelCashLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(jLabel9, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-            .addGroup(jPanel6Layout.createSequentialGroup()
+            .addGroup(panelCashLayout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                .addGroup(panelCashLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jLabel10)
                     .addComponent(jLabel11))
                 .addGap(26, 26, 26)
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                .addGroup(panelCashLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                     .addComponent(txtNominalBayar)
                     .addComponent(txtKembalian, javax.swing.GroupLayout.DEFAULT_SIZE, 120, Short.MAX_VALUE))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
-        jPanel6Layout.setVerticalGroup(
-            jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel6Layout.createSequentialGroup()
+        panelCashLayout.setVerticalGroup(
+            panelCashLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(panelCashLayout.createSequentialGroup()
                 .addContainerGap()
                 .addComponent(jLabel9)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addGroup(panelCashLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel10)
                     .addComponent(txtNominalBayar, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addGroup(panelCashLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel11)
                     .addComponent(txtKembalian, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
-        jPanel7.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
+        panelDigital.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
         jLabel12.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
         jLabel12.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
@@ -415,28 +534,28 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
         jLabel13.setText("Nomor E-Wallet/Kartu");
 
-        javax.swing.GroupLayout jPanel7Layout = new javax.swing.GroupLayout(jPanel7);
-        jPanel7.setLayout(jPanel7Layout);
-        jPanel7Layout.setHorizontalGroup(
-            jPanel7Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel7Layout.createSequentialGroup()
+        javax.swing.GroupLayout panelDigitalLayout = new javax.swing.GroupLayout(panelDigital);
+        panelDigital.setLayout(panelDigitalLayout);
+        panelDigitalLayout.setHorizontalGroup(
+            panelDigitalLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(panelDigitalLayout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(jPanel7Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                .addGroup(panelDigitalLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jLabel12, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addGroup(jPanel7Layout.createSequentialGroup()
+                    .addGroup(panelDigitalLayout.createSequentialGroup()
                         .addComponent(jLabel13)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                         .addComponent(txtNomor, javax.swing.GroupLayout.PREFERRED_SIZE, 121, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(0, 273, Short.MAX_VALUE)))
                 .addContainerGap())
         );
-        jPanel7Layout.setVerticalGroup(
-            jPanel7Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel7Layout.createSequentialGroup()
+        panelDigitalLayout.setVerticalGroup(
+            panelDigitalLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(panelDigitalLayout.createSequentialGroup()
                 .addContainerGap()
                 .addComponent(jLabel12)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel7Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addGroup(panelDigitalLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel13)
                     .addComponent(txtNomor, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
@@ -448,13 +567,6 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
         btnProses.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 btnProsesActionPerformed(evt);
-            }
-        });
-
-        btnCetak.setText("Cetak Nota");
-        btnCetak.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                btnCetakActionPerformed(evt);
             }
         });
 
@@ -473,8 +585,6 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
                 .addContainerGap()
                 .addComponent(btnProses, javax.swing.GroupLayout.PREFERRED_SIZE, 75, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(btnCetak)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(btnSimpan, javax.swing.GroupLayout.PREFERRED_SIZE, 75, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
@@ -484,12 +594,11 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGroup(jPanel8Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(btnProses)
-                    .addComponent(btnCetak)
                     .addComponent(btnSimpan))
                 .addGap(37, 37, 37))
         );
 
-        jPanel10.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
+        panelMember.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
 
         jLabel15.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
         jLabel15.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
@@ -512,34 +621,112 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
         jLabel16.setText("Nama");
 
-        javax.swing.GroupLayout jPanel10Layout = new javax.swing.GroupLayout(jPanel10);
-        jPanel10.setLayout(jPanel10Layout);
-        jPanel10Layout.setHorizontalGroup(
-            jPanel10Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+        javax.swing.GroupLayout panelMemberLayout = new javax.swing.GroupLayout(panelMember);
+        panelMember.setLayout(panelMemberLayout);
+        panelMemberLayout.setHorizontalGroup(
+            panelMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(jLabel15, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-            .addGroup(jPanel10Layout.createSequentialGroup()
+            .addGroup(panelMemberLayout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(jPanel10Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                .addGroup(panelMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jLabel14, javax.swing.GroupLayout.PREFERRED_SIZE, 65, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jLabel16, javax.swing.GroupLayout.PREFERRED_SIZE, 43, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(36, 36, 36)
-                .addGroup(jPanel10Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                .addGroup(panelMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                     .addComponent(txtNama, javax.swing.GroupLayout.DEFAULT_SIZE, 119, Short.MAX_VALUE)
                     .addComponent(txtIdMember))
-                .addContainerGap(310, Short.MAX_VALUE))
+                .addContainerGap(307, Short.MAX_VALUE))
         );
-        jPanel10Layout.setVerticalGroup(
-            jPanel10Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(jPanel10Layout.createSequentialGroup()
+        panelMemberLayout.setVerticalGroup(
+            panelMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(panelMemberLayout.createSequentialGroup()
                 .addComponent(jLabel15)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel10Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                .addGroup(panelMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                     .addComponent(jLabel14)
                     .addComponent(txtIdMember, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel10Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                .addGroup(panelMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(txtNama, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jLabel16))
+                .addContainerGap(16, Short.MAX_VALUE))
+        );
+
+        panelNonMember.setBorder(new javax.swing.border.LineBorder(null));
+
+        jLabel17.setFont(new java.awt.Font("Segoe UI", 1, 12)); // NOI18N
+        jLabel17.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
+        jLabel17.setText("Non-Member");
+
+        jLabel18.setText("Nama");
+
+        txtNamaNonMember.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                txtNamaNonMemberActionPerformed(evt);
+            }
+        });
+
+        javax.swing.GroupLayout panelNonMemberLayout = new javax.swing.GroupLayout(panelNonMember);
+        panelNonMember.setLayout(panelNonMemberLayout);
+        panelNonMemberLayout.setHorizontalGroup(
+            panelNonMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(panelNonMemberLayout.createSequentialGroup()
+                .addContainerGap()
+                .addGroup(panelNonMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(panelNonMemberLayout.createSequentialGroup()
+                        .addComponent(jLabel17, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addContainerGap())
+                    .addGroup(panelNonMemberLayout.createSequentialGroup()
+                        .addComponent(jLabel18, javax.swing.GroupLayout.PREFERRED_SIZE, 43, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(txtNamaNonMember, javax.swing.GroupLayout.PREFERRED_SIZE, 126, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(307, 307, 307))))
+        );
+        panelNonMemberLayout.setVerticalGroup(
+            panelNonMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(panelNonMemberLayout.createSequentialGroup()
+                .addComponent(jLabel17)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(panelNonMemberLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(txtNamaNonMember, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jLabel18))
+                .addGap(0, 15, Short.MAX_VALUE))
+        );
+
+        jPanel12.setBorder(javax.swing.BorderFactory.createLineBorder(new java.awt.Color(0, 0, 0)));
+
+        rbMember.setText("Member");
+        rbMember.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                rbMemberActionPerformed(evt);
+            }
+        });
+
+        rbNonMember.setText("Non-Member");
+        rbNonMember.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                rbNonMemberActionPerformed(evt);
+            }
+        });
+
+        javax.swing.GroupLayout jPanel12Layout = new javax.swing.GroupLayout(jPanel12);
+        jPanel12.setLayout(jPanel12Layout);
+        jPanel12Layout.setHorizontalGroup(
+            jPanel12Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel12Layout.createSequentialGroup()
+                .addGap(153, 153, 153)
+                .addComponent(rbMember, javax.swing.GroupLayout.PREFERRED_SIZE, 98, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(45, 45, 45)
+                .addComponent(rbNonMember)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+        jPanel12Layout.setVerticalGroup(
+            jPanel12Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel12Layout.createSequentialGroup()
+                .addContainerGap()
+                .addGroup(jPanel12Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(rbMember)
+                    .addComponent(rbNonMember))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
@@ -547,17 +734,19 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
+            .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                    .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel10, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel3, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel4, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel6, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel7, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel8, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel5, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jPanel12, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(panelNonMember, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jPanel2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(panelMember, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jPanel4, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(panelCash, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(panelDigital, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jPanel8, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
@@ -569,13 +758,17 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jPanel10, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(jPanel12, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(panelNonMember, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(panelMember, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jPanel5, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jPanel6, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(panelCash, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jPanel7, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(panelDigital, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jPanel8, javax.swing.GroupLayout.PREFERRED_SIZE, 36, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addContainerGap())
@@ -590,11 +783,13 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
     private void txtDiskonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtDiskonActionPerformed
         // TODO add your handling code here:
-        hitungTotalAkhir();
+       
     }//GEN-LAST:event_txtDiskonActionPerformed
 
     private void rbCashActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_rbCashActionPerformed
         // TODO add your handling code here:
+        panelCash.setVisible(true);
+        panelDigital.setVisible(false);
     }//GEN-LAST:event_rbCashActionPerformed
 
     private void txtKembalianActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtKembalianActionPerformed
@@ -603,110 +798,164 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
     private void btnProsesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnProsesActionPerformed
         // TODO add your handling code here:
-        if (rbCash.isSelected()) {
-            double bayar = Double.parseDouble(txtNominalBayar.getText());
-            double total = Double.parseDouble(txtTotalAkhir.getText());
-
-            double kembali = bayar - total;
-            txtKembalian.setText(String.valueOf(kembali));
-
-            if (kembali < 0) {
-                JOptionPane.showMessageDialog(this, 
-                    "Nominal bayar kurang!", 
-                    "Error", JOptionPane.ERROR_MESSAGE);
+        try {
+            // 1. Jalankan perhitungan (Total Belanja + Pajak - Diskon)
+            hitungDiskonDanPajak(); 
+            
+            // 2. Ambil nilai total akhir yang harus dibayar
+            double totalAkhir = Double.parseDouble(txtTotalAkhir.getText().replace(",", "."));
+            
+            // 3. Validasi khusus jika metode pembayaran adalah CASH
+            if (rbCash.isSelected()) {
+                if (txtNominalBayar.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Silakan isi Nominal Bayar dulu!");
+                    btnSimpan.setEnabled(false); // Pastikan tetap mati
+                    return;
+                }
+                
+                double bayar = Double.parseDouble(txtNominalBayar.getText().replace(",", "."));
+                
+                if (bayar < totalAkhir) {
+                    JOptionPane.showMessageDialog(this, "Uang Kurang! Tidak bisa memproses simpan.");
+                    btnSimpan.setEnabled(false); // Tetap matikan jika uang kurang
+                    return;
+                }
+                
+                // Hitung Kembalian
+                double kembalian = bayar - totalAkhir;
+                txtKembalian.setText(String.format("%.0f", kembalian));
+            } 
+            
+            // 4. Validasi khusus jika metode pembayaran adalah DIGITAL (E-Wallet/Kartu)
+            else if (rbEWallet.isSelected()) {
+                if (txtNomor.getText().trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(this, "Isi Nomor Kartu/Referensi dulu!");
+                    btnSimpan.setEnabled(false);
+                    return;
+                }
             }
+
+            // 5. JIKA SEMUA VALIDASI LOLOS (TIDAK KENA 'RETURN')
+            // MAKA AKTIFKAN TOMBOL SIMPAN
+            btnSimpan.setEnabled(true);
+            
+            // Beri tanda visual agar user tahu
+            btnSimpan.requestFocus(); 
+            JOptionPane.showMessageDialog(this, "Perhitungan Selesai. Silakan klik SIMPAN.");
+
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Input angka tidak valid! Periksa Nominal Bayar.");
+            btnSimpan.setEnabled(false);
         }
     }//GEN-LAST:event_btnProsesActionPerformed
 
-    private void btnSimpanActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSimpanActionPerformed
-        // TODO add your handling code here:
-        // Ambil nama dari TextField panel member
-        String namaMember = txtNama.getText();
+   private void btnSimpanActionPerformed(java.awt.event.ActionEvent evt) {
+        // 1. Matikan tombol segera agar tidak diklik dua kali
+        btnSimpan.setEnabled(false);
 
-        // Dapatkan ID member berdasarkan nama
-        int idMember = getIdMemberByNama(namaMember);
+        try {
+            Transaksi t = new Transaksi();
+            
+            // --- SET DATA TRANSAKSI ---
+            // Penanganan Waktu
+            if (txtTanggal.getText().isEmpty() || txtTanggal.getText().equals("null")) {
+                t.waktu = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            } else {
+                t.waktu = txtTanggal.getText();
+            }
 
-        // Jika member tidak ditemukan (tidak wajib)
-        if (idMember == 0) {
-            System.out.println("Tidak ada member, transaksi dianggap non-member.");
-        }
-
-        Transaksi t = new Transaksi();
-        t.idMember = idMember; // <-- hasil pencarian member
-
-        t.idPesanan = Integer.parseInt(cmbNomorOrder.getSelectedItem().toString());
-        t.idMember = 0; // jika member nanti tinggal tambah input
-
-        t.waktu = java.time.LocalDateTime.now().toString();
-        t.totalBelanja = Double.parseDouble(txtTotalBelanja.getText());
-        t.diskon = Double.parseDouble(txtDiskon.getText().isEmpty() ? "0" : txtDiskon.getText());
-        t.pajak = Double.parseDouble(txtService.getText().isEmpty() ? "0" : txtService.getText());
-        t.totalAkhir = Double.parseDouble(txtTotalAkhir.getText());
-
-        if (rbCash.isSelected()) {
-            t.metode = "Cash";
+            // Ambil ID Pesanan dari Meja yang dipilih
+            int noMeja = Integer.parseInt(cmbNomorMeja.getSelectedItem().toString());
+            ArrayList<TransaksiBackend.Pesanan> list = PesananController.getNomorMejaTerakhir();
+            for(TransaksiBackend.Pesanan p : list) {
+                if(p.getNoMeja() == noMeja) {
+                    t.idPesanan = p.getIdOrder();
+                    break;
+                }
+            }
+            
+            // Set data lainnya dari TextField
+            t.idMember = Integer.parseInt(txtIdMember.getText());
+            t.totalBelanja = Double.parseDouble(txtTotalBelanja.getText());
+            t.diskon = Double.parseDouble(txtDiskon.getText());
+            t.pajak = Double.parseDouble(txtService.getText());
+            t.totalAkhir = Double.parseDouble(txtTotalAkhir.getText());
             t.nominalBayar = Double.parseDouble(txtNominalBayar.getText());
             t.kembalian = Double.parseDouble(txtKembalian.getText());
-            t.nomor = null;
-        } else if (rbEWallet.isSelected()) {
-            t.metode = "E-Wallet";
-            t.nominalBayar = t.totalAkhir;
-            t.kembalian = 0;
+            t.metode = rbCash.isSelected() ? "Cash" : (rbEWallet.isSelected() ? "E-WALLET" : "DEBIT");
             t.nomor = txtNomor.getText();
-        } else if (rbDebit.isSelected()) {
-            t.metode = "Debit";
-            t.nominalBayar = t.totalAkhir;
-            t.kembalian = 0;
-            t.nomor = txtNomor.getText();
+
+            // 2. PROSES SIMPAN (HANYA DIPANGGIL 1 KALI)
+            int idBaru = TransaksiController.insert(t);
+
+            if (idBaru > 0) {
+                // 3. UPDATE STATUS BAYAR (AGAR MEJA HILANG DARI LIST)
+                PesananController.updateStatusBayar(t.idPesanan);
+                if (t.totalBelanja >= 50000) {
+                    MemberController.updatePoinMember(t.idMember, 1);
+                    System.out.println("Poin bertambah +1");
+                }
+
+                if (t.diskon > 0) {
+                    // Query langsung atau buatkan method di MemberController
+                    String resetQuery = "UPDATE member SET poin = 0 WHERE id_member = " + t.idMember;
+                    dbHelper.executeQuery(resetQuery);
+                    System.out.println("Poin direset ke 0 karena sudah digunakan untuk diskon");
+                }
+
+                // 4. BUAT NOTA
+                String nota = "----------------CAFE----------------\n"
+                            + "---------STRUK PEMBAYARAN---------\n"
+                            + "----------------------------------\n"
+                            + "ID Transaksi : " + idBaru + "\n"
+                            + "No Meja      : " + noMeja + "\n"
+                            + "Tanggal      : " + t.waktu + "\n"
+                            + "----------------------------------\n"
+                            + "Total Belanja: " + t.totalBelanja + "\n"
+                            + "Diskon       : " + t.diskon + "\n"
+                            + "Pajak/Servis : " + t.pajak + "\n"
+                            + "TOTAL AKHIR  : " + t.totalAkhir + "\n"
+                            + "----------------------------------\n"
+                            + "Member       : " + txtNama.getText() + " (" + t.idMember + ")\n"
+                            + "----------------------------------\n";
+                
+                if (rbCash.isSelected()) {
+                    nota += "Pembayaran   : CASH\n"
+                        + "Dibayar      : " + t.nominalBayar + "\n"
+                        + "Kembalian    : " + t.kembalian + "\n";
+                } else {
+                    nota += "Pembayaran   : " + t.metode + "\n"
+                        + "No. Ref      : " + t.nomor + "\n";
+                }
+                nota += "----------------------------------\n"
+                    + "     Terima kasih!\n";
+
+                JOptionPane.showMessageDialog(this, "Transaksi Berhasil!");
+                JOptionPane.showMessageDialog(this, nota); // Tampilkan struk
+
+                // 5. RESET DAN REFRESH COMBOBOX
+                resetForm();
+                isiComboNomorOrder(); 
+                
+            } else {
+                JOptionPane.showMessageDialog(this, "Gagal Simpan ke Database.");
+                btnSimpan.setEnabled(true);
+            }
+            
+            if (t.idMember > 0 && Double.parseDouble(txtDiskon.getText()) > 0) {
+                String sqlReset = "UPDATE member SET points = 0 WHERE id_member = " + t.idMember;
+                dbHelper.executeQuery(sqlReset);
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Terjadi Kesalahan: " + e.getMessage());
+            btnSimpan.setEnabled(true);
         }
-
-        int id = TransaksiController.insert(t);
-
-        if (id > 0) {
-            JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan! ID = " + id);
-            txtIdTransaksi.setText(String.valueOf(id));
-        } else {
-            JOptionPane.showMessageDialog(this, "Gagal menyimpan transaksi.");
-        }
-    }//GEN-LAST:event_btnSimpanActionPerformed
-
-    private void btnCetakActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCetakActionPerformed
-        // TODO add your handling code here:
-        String nota = "";
-        nota += "       CAFE\n";
-        nota += "     STRUK PEMBAYARAN\n";
-        nota += "----------------------------------\n";
-        nota += "ID Transaksi : " + txtIdTransaksi.getText() + "\n";
-        nota += "No Pesanan   : " + cmbNomorOrder.getSelectedItem() + "\n";
-        nota += "Tanggal      : " + txtTanggal.getText() + "\n";
-        nota += "----------------------------------\n";
-        nota += "Total Belanja: " + txtTotalBelanja.getText() + "\n";
-        nota += "Diskon       : " + txtDiskon.getText() + "\n";
-        nota += "Pajak/Servis : " + txtService.getText() + "\n";
-        nota += "TOTAL AKHIR  : " + txtTotalAkhir.getText() + "\n";
-        nota += "----------------------------------\n";
-        nota += "ID Member    : " + txtIdMember.getText() + "\n";
-        nota += "Nama Member  : " + txtNama.getText() + "\n";
-        nota += "----------------------------------\n";
-        if (rbCash.isSelected()) {
-            nota += "Pembayaran   : CASH\n";
-            nota += "Dibayar      : " + txtNominalBayar.getText() + "\n";
-            nota += "Kembalian    : " + txtKembalian.getText() + "\n";
-        } else {
-            nota += "Pembayaran   : " +
-                    (rbEWallet.isSelected() ? "E-WALLET" : "DEBIT") + "\n";
-            nota += "Nomor        : " + txtNomor.getText() + "\n";
-        }
-        nota += "----------------------------------\n";
-        nota += "Terima kasih!\n";
-        nota += "----------------------------------\n";
-
-        JOptionPane.showMessageDialog(this, nota);
-    }//GEN-LAST:event_btnCetakActionPerformed
+    }
 
     private void txtServiceActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtServiceActionPerformed
         // TODO add your handling code here:
-        hitungTotalAkhir();
+        hitungDiskonDanPajak();
     }//GEN-LAST:event_txtServiceActionPerformed
 
     private void txtIdMemberActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtIdMemberActionPerformed
@@ -715,11 +964,46 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
 
     private void txtNamaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtNamaActionPerformed
         // TODO add your handling code here:
-        String nama = txtNama.getText();
-        int id = getIdMemberByNama(nama);
-
-        txtIdMember.setText(String.valueOf(id));
+        String nama = txtNama.getText().trim();
+        int id = MemberController.getIdMemberByNama(nama);
+        if (id > 0) {
+            txtIdMember.setText(String.valueOf(id));
+            hitungDiskonDanPajak(); // Langsung hitung diskon setelah ID ditemukan
+            JOptionPane.showMessageDialog(this, "Member ditemukan!");
+        } else {
+            txtIdMember.setText("0");
+            hitungDiskonDanPajak();
+            JOptionPane.showMessageDialog(this, "Member tidak ditemukan.");
+        }
     }//GEN-LAST:event_txtNamaActionPerformed
+
+    private void rbEWalletActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_rbEWalletActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_rbEWalletActionPerformed
+
+    private void cmbNomorMejaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cmbNomorMejaActionPerformed
+        // TODO add your handling code here:
+        String q = "select no_meja from pesanan";
+        ResultSet rs = dbHelper.selectQuery(q);
+        
+        
+    }//GEN-LAST:event_cmbNomorMejaActionPerformed
+
+    private void txtNamaNonMemberActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtNamaNonMemberActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_txtNamaNonMemberActionPerformed
+
+    private void rbMemberActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_rbMemberActionPerformed
+        // TODO add your handling code here:
+        panelMember.setVisible(true);
+        panelNonMember.setVisible(false);
+        txtIdMember.setText("0"); // Reset
+        hitungDiskonDanPajak();   // Update total (diskon jadi aktif)
+    }//GEN-LAST:event_rbMemberActionPerformed
+
+    private void rbNonMemberActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_rbNonMemberActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_rbNonMemberActionPerformed
 
     /**
      * @param args the command line arguments
@@ -747,10 +1031,9 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton btnCetak;
     private javax.swing.JButton btnProses;
     private javax.swing.JButton btnSimpan;
-    private javax.swing.JComboBox<String> cmbNomorOrder;
+    private javax.swing.JComboBox<String> cmbNomorMeja;
     private javax.swing.Box.Filler filler1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel10;
@@ -760,6 +1043,8 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel14;
     private javax.swing.JLabel jLabel15;
     private javax.swing.JLabel jLabel16;
+    private javax.swing.JLabel jLabel17;
+    private javax.swing.JLabel jLabel18;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
     private javax.swing.JLabel jLabel4;
@@ -769,22 +1054,27 @@ public class FrmTransaksiPembayaran extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel8;
     private javax.swing.JLabel jLabel9;
     private javax.swing.JPanel jPanel1;
-    private javax.swing.JPanel jPanel10;
+    private javax.swing.JPanel jPanel12;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
     private javax.swing.JPanel jPanel4;
     private javax.swing.JPanel jPanel5;
-    private javax.swing.JPanel jPanel6;
-    private javax.swing.JPanel jPanel7;
     private javax.swing.JPanel jPanel8;
+    private javax.swing.JPanel jPanel9;
+    private javax.swing.JPanel panelCash;
+    private javax.swing.JPanel panelDigital;
+    private javax.swing.JPanel panelMember;
+    private javax.swing.JPanel panelNonMember;
     private javax.swing.JRadioButton rbCash;
-    private javax.swing.JRadioButton rbDebit;
     private javax.swing.JRadioButton rbEWallet;
+    private javax.swing.JRadioButton rbMember;
+    private javax.swing.JRadioButton rbNonMember;
     private javax.swing.JTextField txtDiskon;
     private javax.swing.JTextField txtIdMember;
     private javax.swing.JTextField txtIdTransaksi;
     private javax.swing.JTextField txtKembalian;
     private javax.swing.JTextField txtNama;
+    private javax.swing.JTextField txtNamaNonMember;
     private javax.swing.JTextField txtNominalBayar;
     private javax.swing.JTextField txtNomor;
     private javax.swing.JTextField txtService;
