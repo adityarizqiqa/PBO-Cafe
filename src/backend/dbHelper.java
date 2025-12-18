@@ -22,7 +22,7 @@ public class dbHelper {
             try {
                 String url = "jdbc:postgresql://localhost:5432/kasir_cafe";
                 String user = "postgres";
-                String password = "1234";
+                String password = "170206";
 
                 Class.forName("org.postgresql.Driver");
 
